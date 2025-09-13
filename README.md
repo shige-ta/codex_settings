@@ -9,27 +9,27 @@ A practical workflow for loading and scanning large codebases fast on Windows by
 - Core Commands
 - Chunk Reading Patterns
 - Troubleshooting
-- Advanced Usage (AGENTS.md)
+- For Agents
 - 日本語クイックガイド（要点）
 - Contributing
 
 ## Why This Exists
-- **Terminal limits:** Avoid slow, noisy whole‑file dumps that get truncated.
-- **Focused scans:** Find only the lines you need, then read small chunks.
-- **Windows-first:** Examples use PowerShell‑safe quoting and paths.
+- Terminal limits: Avoid slow, noisy whole-file dumps that get truncated.
+- Focused scans: Find only the lines you need, then read small chunks.
+- Windows-first: Examples use PowerShell-safe quoting and paths.
 
 ## Quick Start
-- **Requirements:** PowerShell 5.1+ (or 7+), `rg` (ripgrep) recommended.
+- Requirements: PowerShell 5.1+ (or 7+), ripgrep `rg` recommended.
   - Install: `winget install BurntSushi.ripgrep` or `choco install ripgrep`
-- **Scope the repo:**
+- Scope the repo:
   ```powershell
   rg --files -g '!node_modules' -g '!.git' -g '!dist' -g '!build'
   ```
-- **Search multiple targets:**
+- Search multiple targets:
   ```powershell
   rg -n -S -e 'useEffect\(' -e 'export default function' -e 'ApiClient' -g '!node_modules' -g '!android'
   ```
-- **Read only chunks:**
+- Read only chunks:
   ```powershell
   Get-Content -LiteralPath 'path\to\file.tsx' -TotalCount 200   # head
   Get-Content -LiteralPath 'path\to\file.tsx' -Tail 200         # tail
@@ -38,62 +38,67 @@ A practical workflow for loading and scanning large codebases fast on Windows by
   ```
 
 ## Core Workflow
-- **List files:** Prefer `rg --files` with ignores to reduce noise.
-- **Narrow with searches:** Use `rg -n` and multiple `-e` patterns (single quotes).
-- **Read small windows:** Head/tail or windows around matched lines.
-- **Iterate by theme:** Routing, API, storage, tests—avoid reading everything.
+- List files: Prefer `rg --files` with ignores to reduce noise.
+- Narrow with searches: Use `rg -n` and multiple `-e` patterns (single quotes).
+- Read small windows: Head/tail or windows around matched lines.
+- Iterate by theme: Routing, API, storage, tests—avoid reading everything.
 
 ## Core Commands
-- **File list (exclude heavy dirs):**
+- File list (exclude heavy dirs):
   ```powershell
   rg --files -g '!node_modules' -g '!android' -g '!.git' -g '!dist' -g '!build'
   ```
-- **By extension:**
+- By extension:
   ```powershell
   rg --files -g '*.{ts,tsx,js,jsx}' -g '!node_modules' -g '!android'
   ```
-- **TODO / FIXME:**
+- TODO / FIXME:
   ```powershell
   rg -n -e 'TODO|FIXME' -g '!node_modules' -g '!android'
   ```
-- **Type/exports overview:**
+- Type/exports overview:
   ```powershell
   rg -n -S -e '^export (interface|type|class) ' -e '^export default function' -g '!node_modules' -g '!android'
   ```
-- **Largest files (avoid expensive reads):**
+- Largest files (avoid expensive reads):
   ```powershell
   Get-ChildItem -Recurse -File | Sort-Object Length -Descending | Select-Object -First 50 Length,FullName
   ```
 
 ## Chunk Reading Patterns
-- **Head 200 lines:**
+- Head 200 lines:
   ```powershell
   Get-Content -LiteralPath 'path\to\file.tsx' -TotalCount 200
   ```
-- **Tail 200 lines:**
+- Tail 200 lines:
   ```powershell
   Get-Content -LiteralPath 'path\to\file.tsx' -Tail 200
   ```
-- **Around line N (~200 lines window):**
+- Around line N (~200 lines window):
   ```powershell
   Get-Content -LiteralPath 'file.tsx' -TotalCount (N+100) | Select-Object -Last 200
   ```
-- **Keep output readable:**
+- Keep output readable:
   ```powershell
   rg -n -C 2 -m 200 --max-columns 200 --color=never -e 'ApiClient' -g '!node_modules'
   ```
 
 ## Troubleshooting
-- **rg: No files were searched** → Your `-g` filters likely excluded everything. Try `-uu` or relax patterns. Use `rg --debug` to inspect.
-- **Regex looks interpreted by PowerShell** → Use single quotes around patterns, e.g. `-e 'password\b'`.
-- **pwsh not found** → Use `powershell` or install PowerShell 7.
+- rg: “No files were searched” → `-g` filters likely excluded everything. Try `-uu` or relax patterns; use `rg --debug` to inspect.
+- Regex interpreted by PowerShell → Use single quotes, e.g. `-e 'password\b'`.
+- pwsh not found → Use `powershell` or install PowerShell 7.
 
-## Advanced Usage (AGENTS.md)
-For operator tips (quoting/escape rules, parallelization, logging, encoding checks, RN filters) see: [AGENTS.md](AGENTS.md)
+## For Agents
+See AGENTS.md for operator guidance. Highlights:
+- Positive guidance: Write instructions as “Do X” (not “Don’t Y”).
+- Roles & collaboration: Branch `agent/<role>/<topic>`, lock via `ops/locks/`, commit `type(scope): summary [agent:@name]`.
+- Style & token budgets: ≤6 lines/section, ≤120 chars/line, code ≤10 lines; provide copy‑ready commands.
+- RAG hooks & summaries: Use `summaries/` (overview/routes/api/storage) for lightweight retrieval.
+- Naming & structure: `kebab-case` dirs, `PascalCase` types, single‑responsibility files (~500 LOC) with a 5‑line overview.
 
 ## 日本語クイックガイド（要点）
 - 目的: 出力上限（約10KB/最大256行）を意識し、必要な行だけを抽出。
-- 基本フロー: 生成物を除外 → `rg -n` で複数キーワード絞り込み → `Get-Content` で必要範囲のみ読む → テーマ単位で反復。
+- 基本フロー: 生成物を除外 → `rg -n` で複数キーワード絞り込み → `Get-Content` で必要範囲のみ読む。
 - 引用/エスケープ: PowerShell は基本 `'...'`。`rg` の正規表現は `useEffect\(` のようにエスケープ。パスは `-LiteralPath`。
 - 出力制御: `-C`（前後文脈）、`-m`（件数上限）、`--max-columns`、`--color=never` を併用。
 - 並列/バッチ: PS7 は `-Parallel`、5.1 はジョブで代替。対象は `files.txt` に分割。
