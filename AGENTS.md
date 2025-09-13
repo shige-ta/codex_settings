@@ -1,11 +1,20 @@
 # Codex CLI: Rapid Codebase Scanning (Windows)
 
-Purpose: Load large repos fast by focusing only on relevant lines.
-Effective output limit in this environment: about 10KB / up to ~256 lines per command. Prefer small, precise reads over whole‑file dumps.
+---
+scope: repository root
+for: AI agents and maintainers
+not_for: end-user documentation
+last_updated: 2025-09-13
+maintainers: [@shige-ta]
+---
 
-Note: For a user‑facing summary of the workflow, see `README.md`. This document focuses on operator tips, pitfalls, and advanced usage on Windows/PowerShell.
+Purpose: Load large repos fast by focusing only on relevant lines.
+Effective output limit in this environment: ~10KB and up to ~256 lines per command. Prefer small, precise reads over whole‑file dumps.
+
+Note: README.md is the user-facing quick guide. This AGENTS.md gives operators practical rules, collaboration patterns, and advanced tips for Windows/PowerShell.
 
 ## Table of Contents
+- Front Matter
 - Requirements
 - Workflow
 - Core Commands
@@ -13,24 +22,31 @@ Note: For a user‑facing summary of the workflow, see `README.md`. This documen
 - PowerShell Quoting Cheatsheet
 - Detect Encoding / Mojibake
 - Expo/React Native Quick Filters
-- Example
+- Examples
 - Tips
 - Troubleshooting
 - Batch / Parallel Processing
 - Timeouts / Resume / Logging
+- Positive Guidance Principles
+- Information Hierarchy & Sources of Truth
+- Roles & Collaboration
+- Style & Token Budgets
+- Naming & Structure
+- RAG Hooks & Summaries
+- Code Documentation for Agents
+- Templates
 - 日本語クイックガイド（要点）
 
 ## Requirements
 - PowerShell 5.1 or PowerShell 7+ (recommended).
-- ripgrep (`rg`) installed for fast search.
-  - winget: `winget install BurntSushi.ripgrep`
-  - Chocolatey: `choco install ripgrep`
-  - If `rg` is unavailable, use `Select-String` as a slower fallback.
+- ripgrep (`rg`) for fast search.
+  - Install: `winget install BurntSushi.ripgrep` or `choco install ripgrep`
+  - Fallback: `Select-String` (slower) if `rg` is unavailable.
 
 ## Workflow
-- List files with ignore rules to scope the repo.
-- Narrow with `rg -n` using multiple `-e` patterns.
-- Read small chunks only: head/tail or a window around known lines.
+- Scope files with ignore rules.
+- Narrow via `rg -n` and multiple `-e` patterns.
+- Read small chunks only (head/tail or windows around hits).
 - Iterate by theme (routing, API, storage, tests) instead of reading everything.
 
 ## Core Commands
@@ -62,26 +78,25 @@ Note: For a user‑facing summary of the workflow, see `README.md`. This documen
 ## Chunk Reading Patterns
 - Head 200 lines:
   ```powershell
-  Get-Content 'path\to\file.tsx' -TotalCount 200
+  Get-Content -LiteralPath 'path\to\file.tsx' -TotalCount 200
   ```
 - Tail 200 lines:
   ```powershell
-  Get-Content 'path\to\file.tsx' -Tail 200
+  Get-Content -LiteralPath 'path\to\file.tsx' -Tail 200
   ```
 - Around line N (~200 lines window):
   ```powershell
-  Get-Content 'file.tsx' -TotalCount (N+100) | Select-Object -Last 200
+  Get-Content -LiteralPath 'file.tsx' -TotalCount (N+100) | Select-Object -Last 200
   ```
 
 ## PowerShell Quoting Cheatsheet
-- Prefer single quotes around regex strings: `'ApiClient'`, `'useEffect\('`, `'password\b'`.
+- Prefer single quotes for regex: `'ApiClient'`, `'useEffect\('`, `'password\b'`.
 - Use double quotes only if variable expansion is needed.
-- For paths that might start with `-`, use `-LiteralPath` instead of relying on `--`.
+- For paths that might start with `-`, use `-LiteralPath`.
   ```powershell
   Get-Content -LiteralPath $path -TotalCount 80 | Out-Null
   ```
-- For external commands like `rg`, single quotes keep PCRE escapes intact on Windows.
-- Keep outputs concise with context/limits:
+- Keep outputs concise:
   ```powershell
   rg -n -C 2 -m 200 --max-columns 200 --color=never -e 'ApiClient' -g '!node_modules'
   ```
@@ -91,7 +106,7 @@ Note: For a user‑facing summary of the workflow, see `README.md`. This documen
   ```powershell
   rg -n -P '[^\x09\x0A\x0D\x20-\x7E]' -g '!node_modules' -g '!android'
   ```
-- Specific odd sequence (useful for import/syntax breaks in RN projects):
+- Suspicious sequence (helps spot import breaks):
   ```powershell
   rg -n -S 'Switch,\s+const' -g '!node_modules' -g '!android'
   ```
@@ -106,16 +121,16 @@ Note: For a user‑facing summary of the workflow, see `README.md`. This documen
   rg -n -e 'AsyncStorage' -e 'ApiClient' -g '!node_modules' -g '!android'
   ```
 
-## Example
-- Find the import/syntax break in a screen file:
+## Examples
+- Find an import/syntax break in a screen file:
   ```powershell
   rg -n -S 'Switch,\s+const' -g '!node_modules' -g '!android'
   ```
 - Inspect the top of a candidate file:
   ```powershell
-  Get-Content 'app\(tabs)\index.tsx' -TotalCount 120
+  Get-Content -LiteralPath 'app\(tabs)\index.tsx' -TotalCount 120
   ```
-- Search for duplicate function definitions in utilities:
+- Search for duplicate function definitions:
   ```powershell
   rg -n '^export const saveAllCampaigns' utils
   ```
@@ -124,13 +139,13 @@ Note: For a user‑facing summary of the workflow, see `README.md`. This documen
 - Keep outputs under ~200–250 lines to avoid truncation.
 - Always exclude generated/large directories.
 - Prefer many small, focused reads over one large dump.
-- If Windows env‑var syntax breaks in scripts, run commands directly instead of npm scripts.
+- If Windows env‑var syntax breaks, run commands directly instead of npm scripts.
 
 ## Troubleshooting
-- `pwsh` not found: use `powershell` or install PowerShell 7.
-- `rg` returns “No files were searched”: a `-g` pattern likely excluded everything. Try `-uu` or remove over‑strict `-g` filters. Use `rg --debug` to see why.
-- Regex looks “interpreted” by PowerShell (e.g., `password\b` error): quote with single quotes: `-e 'password\b'`.
-- Encoding noise/mixed line endings: normalize files to UTF‑8 and prefer LF in git; let Git handle CRLF on checkout as needed.
+- `pwsh` not found → use `powershell` or install PowerShell 7.
+- `rg` says “No files were searched” → a `-g` pattern likely excluded everything. Try `-uu` or relax filters. Inspect with `rg --debug`.
+- Regex “interpreted” by PowerShell (e.g., `password\b` error) → quote with single quotes: `-e 'password\b'`.
+- Mixed encodings/line endings → normalize to UTF‑8; prefer LF in git; allow CRLF on checkout.
 
 ## Batch / Parallel Processing
 - List targets (exclude generated artifacts):
@@ -173,19 +188,77 @@ Note: For a user‑facing summary of the workflow, see `README.md`. This documen
   ```
 
 ## Timeouts / Resume / Logging
-- Timeouts: prefer native `--timeout` where available; otherwise wrap jobs with a watchdog timer.
-- Resume: maintain `ok.txt` and `fail.txt`; rerun on the diff via `-notin (Get-Content ok.txt)` patterns.
-- Logging: save stdout/stderr with minimal color/noise for diffing.
+- Timeouts: prefer native `--timeout`; otherwise wrap jobs with a watchdog timer.
+- Resume: keep `ok.txt` and `fail.txt`; rerun the diff via `-notin (Get-Content ok.txt)`.
+- Logging: minimize color/noise for diffing.
   ```powershell
   $stamp = Get-Date -Format yyyyMMdd-HHmmss
   some-command --color=never 2>&1 | Tee-Object -FilePath "logs\run-$stamp.log"
   ```
 
+## Positive Guidance Principles
+- Prefer “Do X” over “Don’t Y”. State desired behaviors, not prohibitions.
+- Lead with outcome and next step; defer background to links.
+- Show copy‑ready commands; avoid ambiguous placeholders.
+- Keep each instruction actionable within 3 steps.
+- Favor deterministic flags and predictable output size.
+
+## Information Hierarchy & Sources of Truth
+Order of reference when resolving conflicts:
+1) Source of truth (product specs/issue tracker)
+2) Project rules/docs (this repo)
+3) AGENTS.md (this file)
+4) README.md (quick how‑to)
+5) Code comments
+6) Commit history
+
+## Roles & Collaboration
+- Role playbooks (≤5 lines each):
+  - `jr-dev`: scan → minimal diff → patch proposal
+  - `refactor`: clarify boundaries → rename safely → side‑effect checks
+  - `review`: rules/safety/diff size/regression risk
+- Branch naming: `agent/<role>/<topic>` (e.g., `agent/jr-dev/readme-toc`).
+- Locking: create `ops/locks/<path>.lock` for long edits.
+- Commit template: `type(scope): summary (#issue) [agent:@name]`.
+
+## Style & Token Budgets
+- Section ≤6 lines; line ≤120 chars; code block ≤10 lines.
+- Bullets over prose; link deep explanations via anchors.
+- Prefer minimal variables; avoid env‑specific branches inline.
+- Start sections with “Outcome: …” when helpful (e.g., “Outcome: list 3 files + 5 hits”).
+
+## Naming & Structure
+- Directories: `docs/`, `summaries/`, `prompts/`, `workflows/`, `scripts/`, `ops/locks/`.
+- Naming: folders `kebab-case`; TS types `PascalCase`; vars `camelCase`; constants `SCREAMING_SNAKE_CASE`.
+- One responsibility per file; keep under ~500 LOC; add 5‑line module overview at top.
+
+## RAG Hooks & Summaries
+- Summaries directory:
+  - `summaries/overview.md` (~200 words)
+  - `summaries/routes.md`, `summaries/api.md`, `summaries/storage.md`
+- Retrieval examples:
+  ```powershell
+  rg -n -S -e '^# (Rules|Playbooks|Decisions)' AGENTS.md
+  rg -n -S -e 'Outcome:' summaries/*.md
+  ```
+
+## Code Documentation for Agents
+- Top‑of‑file: 5‑line overview with purpose, inputs, outputs.
+- Public functions: 1‑line doc comment with side‑effects and errors.
+- High‑risk spots: add a short “Decision Record” with rationale + 1 link.
+
+## Templates
+- PR description:
+  - Purpose → Scope → Non‑Goals → Validation → Risks → Rollback
+- Change plan:
+  - Context → Impacted areas → Phased rollout → Exit criteria → Metrics
+
 ## 日本語クイックガイド（要点）
-- 目的: 大規模リポジトリを高速に把握するため、必要な行だけを抽出。
-- 基本フロー: 生成物を除外→`rg -n` 複数キーワードで絞り込み→`Get-Content` で必要範囲だけ読む→テーマ単位で反復。
-- 引用/エスケープ: PowerShell は基本 `'...'` を使用。パスは `-LiteralPath` を推奨。`rg` は `'useEffect\('` のようにエスケープ。
-- 並列化: PowerShell 7+ は `ForEach-Object -Parallel`、5.1 はジョブで代替し `-ThrottleLimit` で同時数を制御。
-- バッチ処理: 対象を `files.txt` に出力し、100件単位で処理。
-- 再開/ログ: `ok.txt`/`fail.txt` を更新し差分再実行。ログは `logs\run-<timestamp>.log` に保存。
+- 目的: 出力上限（約10KB/最大256行）を意識し、必要な行だけを抽出。
+- 指示法: 否定ではなく肯定的な行動指示で統一（Doベース）。
+- 基本フロー: 生成物を除外 → `rg -n` で複数キーワード絞り込み → `Get-Content` で必要範囲のみ読む。
+- マルチエージェント: 役割別プレイブック、`agent/<role>/<topic>` ブランチ、`ops/locks/` ロック。
+- RAG/サマリー: `summaries/` に階層サマリーを配置し、まず `overview.md` から参照。
+- 命名/構造: ディレクトリは `kebab-case`、型は `PascalCase`、1ファイル1責務（~500行）。
+- トークン節約: 1セクション6行以内、コードは10行以内、コピー可能な最小コマンドを提示。
 
